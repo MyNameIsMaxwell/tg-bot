@@ -110,17 +110,22 @@ function renderTemplates(templates) {
       </div>
       <div class="ios-template-actions">
         <div class="ios-run-section">
-          <select class="ios-form-input ios-form-select" data-role="run-period" data-id="${tpl.id}">
-            <option value="6">6 ч</option>
-            <option value="12">12 ч</option>
-            <option value="24" selected>24 ч</option>
-            <option value="48">48 ч</option>
-          </select>
+          <div class="ios-custom-dropdown" data-role="run-period" data-id="${tpl.id}" data-value="24">
+            <div class="ios-dropdown-trigger">
+              <span class="ios-dropdown-value">24 часа</span>
+            </div>
+            <div class="ios-dropdown-menu">
+              <div class="ios-dropdown-option" data-value="6">6 часов</div>
+              <div class="ios-dropdown-option" data-value="12">12 часов</div>
+              <div class="ios-dropdown-option selected" data-value="24">24 часа</div>
+              <div class="ios-dropdown-option" data-value="48">48 часов</div>
+            </div>
+          </div>
           <button class="ios-button ios-button-primary ios-button-small" data-action="run-now" data-id="${tpl.id}">
             Отправить
           </button>
         </div>
-        <div class="ios-actions">
+        <div class="ios-actions-grid">
           <button class="ios-button ios-button-secondary ios-button-small" data-action="edit" data-id="${tpl.id}">
             Редактировать
           </button>
@@ -307,8 +312,8 @@ async function handleTemplateAction(event) {
     button.textContent = '...';
     button.classList.add('ios-loading');
 
-    const select = document.querySelector(`select[data-role="run-period"][data-id="${id}"]`);
-    const hours = select ? Number(select.value) : 24;
+    const dropdown = document.querySelector(`.ios-custom-dropdown[data-role="run-period"][data-id="${id}"]`);
+    const hours = dropdown ? Number(dropdown.dataset.value) : 24;
 
     try {
       const res = await fetch(`/api/templates/${id}/run-now?hours_back=${hours}`, {
@@ -379,6 +384,48 @@ sheetBackdrop?.addEventListener('click', closeSheet);
 templatesContainer?.addEventListener('click', handleTemplateAction);
 form?.addEventListener('submit', submitTemplate);
 loadTargetsBtn?.addEventListener('click', loadTargets);
+
+// Custom Dropdown Logic
+document.addEventListener('click', (e) => {
+  // Handle dropdown trigger click
+  const trigger = e.target.closest('.ios-dropdown-trigger');
+  if (trigger) {
+    const dropdown = trigger.closest('.ios-custom-dropdown');
+    // Close all other dropdowns
+    document.querySelectorAll('.ios-custom-dropdown.open').forEach(d => {
+      if (d !== dropdown) d.classList.remove('open');
+    });
+    dropdown.classList.toggle('open');
+    e.stopPropagation();
+    return;
+  }
+
+  // Handle option click
+  const option = e.target.closest('.ios-dropdown-option');
+  if (option) {
+    const dropdown = option.closest('.ios-custom-dropdown');
+    const value = option.dataset.value;
+    const text = option.textContent;
+    
+    // Update dropdown
+    dropdown.dataset.value = value;
+    dropdown.querySelector('.ios-dropdown-value').textContent = text;
+    
+    // Update selected state
+    dropdown.querySelectorAll('.ios-dropdown-option').forEach(opt => {
+      opt.classList.toggle('selected', opt === option);
+    });
+    
+    dropdown.classList.remove('open');
+    e.stopPropagation();
+    return;
+  }
+
+  // Close dropdowns when clicking outside
+  document.querySelectorAll('.ios-custom-dropdown.open').forEach(d => {
+    d.classList.remove('open');
+  });
+});
 
 // Initial load
 loadTemplates();
