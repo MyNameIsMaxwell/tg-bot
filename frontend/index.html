@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Сводки</title>
+    <style>
+      /* iOS Design System */
+      :root {
+        --ios-bg: #F2F2F7;
+        --ios-card: #FFFFFF;
+        --ios-blue: #007AFF;
+        --ios-red: #FF3B30;
+        --ios-green: #34C759;
+        --ios-orange: #FF9500;
+        --ios-text: #1C1C1E;
+        --ios-text-secondary: #8E8E93;
+        --ios-separator: rgba(60, 60, 67, 0.12);
+        --ios-radius: 12px;
+        --ios-radius-lg: 16px;
+        --safe-area-top: env(safe-area-inset-top, 0px);
+        --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+        background: var(--ios-bg);
+        color: var(--ios-text);
+        line-height: 1.4;
+        min-height: 100vh;
+        padding-top: var(--safe-area-top);
+        padding-bottom: var(--safe-area-bottom);
+      }
+
+      /* Navigation Bar */
+      .ios-navbar {
+        background: var(--ios-bg);
+        padding: 12px 16px 8px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .ios-large-title {
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        margin-bottom: 12px;
+      }
+
+      /* Main Content */
+      .ios-content {
+        padding: 0 16px 100px;
+      }
+
+      /* Grouped List */
+      .ios-grouped-list {
+        background: var(--ios-card);
+        border-radius: var(--ios-radius);
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+
+      .ios-list-header {
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--ios-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 24px 16px 8px;
+      }
+
+      .ios-list-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--ios-card);
+        border-bottom: 0.5px solid var(--ios-separator);
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .ios-list-item:last-child {
+        border-bottom: none;
+      }
+
+      .ios-list-item:active {
+        background: rgba(0, 0, 0, 0.05);
+      }
+
+      .ios-list-item-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ios-list-item-title {
+        font-size: 17px;
+        font-weight: 400;
+        margin-bottom: 2px;
+      }
+
+      .ios-list-item-subtitle {
+        font-size: 15px;
+        color: var(--ios-text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ios-list-item-chevron {
+        color: #C7C7CC;
+        margin-left: 8px;
+        font-size: 20px;
+      }
+
+      .ios-list-item-badge {
+        font-size: 15px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 500;
+      }
+
+      .ios-badge-active {
+        background: rgba(52, 199, 89, 0.15);
+        color: var(--ios-green);
+      }
+
+      .ios-badge-inactive {
+        background: rgba(142, 142, 147, 0.15);
+        color: var(--ios-text-secondary);
+      }
+
+      /* Empty State */
+      .ios-empty-state {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--ios-text-secondary);
+      }
+
+      .ios-empty-state-icon {
+        font-size: 56px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+      }
+
+      .ios-empty-state-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--ios-text);
+        margin-bottom: 8px;
+      }
+
+      .ios-empty-state-text {
+        font-size: 15px;
+      }
+
+      /* Buttons */
+      .ios-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: inherit;
+        font-size: 17px;
+        font-weight: 400;
+        padding: 14px 20px;
+        border: none;
+        border-radius: var(--ios-radius);
+        cursor: pointer;
+        transition: transform 0.1s, opacity 0.1s;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      .ios-button:active {
+        transform: scale(0.97);
+        opacity: 0.8;
+      }
+
+      .ios-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .ios-button-primary {
+        background: var(--ios-blue);
+        color: white;
+        font-weight: 600;
+      }
+
+      .ios-button-secondary {
+        background: rgba(0, 122, 255, 0.12);
+        color: var(--ios-blue);
+      }
+
+      .ios-button-destructive {
+        background: rgba(255, 59, 48, 0.12);
+        color: var(--ios-red);
+      }
+
+      .ios-button-plain {
+        background: transparent;
+        color: var(--ios-blue);
+        padding: 8px 12px;
+      }
+
+      .ios-button-small {
+        font-size: 15px;
+        padding: 8px 14px;
+      }
+
+      .ios-button-block {
+        width: 100%;
+      }
+
+      /* Floating Action Button */
+      .ios-fab-container {
+        position: fixed;
+        bottom: 24px;
+        left: 16px;
+        right: 16px;
+        padding-bottom: var(--safe-area-bottom);
+        z-index: 50;
+      }
+
+      .ios-fab {
+        width: 100%;
+        box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+      }
+
+      /* Sheet Modal */
+      .ios-sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: none;
+        align-items: flex-end;
+        justify-content: center;
+      }
+
+      .ios-sheet.open {
+        display: flex;
+      }
+
+      .ios-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        animation: fadeIn 0.2s ease;
+      }
+
+      .ios-sheet-content {
+        position: relative;
+        width: 100%;
+        max-height: 90vh;
+        background: var(--ios-card);
+        border-radius: var(--ios-radius-lg) var(--ios-radius-lg) 0 0;
+        animation: slideUp 0.3s ease;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .ios-sheet-handle {
+        width: 36px;
+        height: 5px;
+        background: rgba(60, 60, 67, 0.3);
+        border-radius: 3px;
+        margin: 8px auto 0;
+        flex-shrink: 0;
+      }
+
+      .ios-sheet-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px;
+        border-bottom: 0.5px solid var(--ios-separator);
+        flex-shrink: 0;
+      }
+
+      .ios-sheet-title {
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .ios-sheet-body {
+        padding: 16px;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
+
+      /* Form Elements */
+      .ios-form-group {
+        margin-bottom: 20px;
+      }
+
+      .ios-form-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--ios-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+        padding-left: 16px;
+      }
+
+      .ios-form-input {
+        width: 100%;
+        font-family: inherit;
+        font-size: 17px;
+        padding: 12px 16px;
+        border: none;
+        border-radius: var(--ios-radius);
+        background: var(--ios-bg);
+        color: var(--ios-text);
+        outline: none;
+        transition: box-shadow 0.2s;
+      }
+
+      .ios-form-input:focus {
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
+      }
+
+      .ios-form-input::placeholder {
+        color: var(--ios-text-secondary);
+      }
+
+      textarea.ios-form-input {
+        resize: vertical;
+        min-height: 100px;
+      }
+
+      .ios-form-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238E8E93' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 16px center;
+        padding-right: 40px;
+      }
+
+      /* Toggle Switch */
+      .ios-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: var(--ios-card);
+        border-radius: var(--ios-radius);
+      }
+
+      .ios-toggle-label {
+        font-size: 17px;
+      }
+
+      .ios-switch {
+        position: relative;
+        width: 51px;
+        height: 31px;
+        appearance: none;
+        background: #E9E9EB;
+        border-radius: 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .ios-switch:checked {
+        background: var(--ios-green);
+      }
+
+      .ios-switch::before {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 27px;
+        height: 27px;
+        background: white;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s;
+      }
+
+      .ios-switch:checked::before {
+        transform: translateX(20px);
+      }
+
+      /* Action Buttons Row */
+      .ios-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      /* Targets List */
+      .ios-targets-container {
+        margin-top: 12px;
+      }
+
+      .ios-target-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--ios-bg);
+        border-radius: var(--ios-radius);
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .ios-target-item:active {
+        background: rgba(0, 0, 0, 0.08);
+      }
+
+      .ios-target-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--ios-blue), #5856D6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        margin-right: 12px;
+        flex-shrink: 0;
+      }
+
+      .ios-target-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ios-target-title {
+        font-size: 17px;
+        font-weight: 500;
+        margin-bottom: 2px;
+      }
+
+      .ios-target-subtitle {
+        font-size: 14px;
+        color: var(--ios-text-secondary);
+      }
+
+      /* Template Detail Card */
+      .ios-template-detail {
+        background: var(--ios-card);
+        border-radius: var(--ios-radius);
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+
+      .ios-template-header {
+        padding: 16px;
+        border-bottom: 0.5px solid var(--ios-separator);
+      }
+
+      .ios-template-name {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .ios-template-meta {
+        font-size: 14px;
+        color: var(--ios-text-secondary);
+      }
+
+      .ios-template-info {
+        padding: 0;
+      }
+
+      .ios-template-info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 0.5px solid var(--ios-separator);
+      }
+
+      .ios-template-info-row:last-child {
+        border-bottom: none;
+      }
+
+      .ios-template-info-label {
+        color: var(--ios-text-secondary);
+      }
+
+      .ios-template-info-value {
+        font-weight: 500;
+        text-align: right;
+      }
+
+      .ios-template-actions {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: var(--ios-bg);
+      }
+
+      /* Run Now Section */
+      .ios-run-section {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .ios-run-section select {
+        flex: 1;
+      }
+
+      .ios-run-section button {
+        flex-shrink: 0;
+      }
+
+      /* Loading State */
+      .ios-loading {
+        position: relative;
+      }
+
+      .ios-loading::after {
+        content: '';
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        border: 2px solid transparent;
+        border-top-color: currentColor;
+        border-radius: 50%;
+        animation: ios-spin 0.8s linear infinite;
+      }
+
+      @keyframes ios-spin {
+        to { transform: translateY(-50%) rotate(360deg); }
+      }
+
+      /* Refresh Button */
+      .ios-refresh-btn {
+        position: absolute;
+        right: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+
+      .ios-navbar-container {
+        position: relative;
+      }
+
+      /* Scrollable content indicator */
+      .ios-content::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* Loading Skeleton */
+      .ios-skeleton {
+        background: linear-gradient(90deg, #E5E5EA 25%, #F2F2F7 50%, #E5E5EA 75%);
+        background-size: 200% 100%;
+        animation: ios-skeleton 1.5s infinite;
+        border-radius: var(--ios-radius);
+      }
+
+      @keyframes ios-skeleton {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+
+      .ios-skeleton-item {
+        height: 72px;
+        margin-bottom: 1px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigation Bar -->
+    <nav class="ios-navbar">
+      <div class="ios-navbar-container">
+        <h1 class="ios-large-title">Сводки</h1>
+        <button class="ios-button ios-button-plain ios-refresh-btn" id="reload-btn">
+          Обновить
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="ios-content">
+      <p class="ios-list-header">Ваши шаблоны</p>
+      <div id="templates-container" class="ios-grouped-list">
+        <!-- Templates will be rendered here -->
+      </div>
+    </main>
+
+    <!-- Floating Action Button -->
+    <div class="ios-fab-container">
+      <button class="ios-button ios-button-primary ios-fab" id="create-btn">
+        + Создать шаблон
+      </button>
+    </div>
+
+    <!-- Sheet Modal -->
+    <div class="ios-sheet" id="template-dialog">
+      <div class="ios-sheet-backdrop" id="sheet-backdrop"></div>
+      <div class="ios-sheet-content">
+        <div class="ios-sheet-handle"></div>
+        <div class="ios-sheet-header">
+          <button class="ios-button ios-button-plain" id="dialog-cancel">Отмена</button>
+          <span class="ios-sheet-title" id="dialog-title">Новый шаблон</span>
+          <button class="ios-button ios-button-plain" type="submit" form="template-form" id="dialog-save">Сохранить</button>
+        </div>
+        <div class="ios-sheet-body">
+          <form id="template-form">
+            <input type="hidden" id="template-id" />
+            
+            <div class="ios-form-group">
+              <label class="ios-form-label">Название</label>
+              <input type="text" id="template-name" class="ios-form-input" placeholder="Например: Утренняя сводка" required />
+            </div>
+
+            <div class="ios-form-group">
+              <label class="ios-form-label">Источники (по одному в строке)</label>
+              <textarea id="template-sources" class="ios-form-input" placeholder="@channel1&#10;@channel2&#10;-1001234567890" rows="4"></textarea>
+            </div>
+
+            <div class="ios-form-group">
+              <label class="ios-form-label">Куда отправлять</label>
+              <input type="text" id="template-target" class="ios-form-input" placeholder="@username или ID чата" required />
+              <div class="ios-targets-container">
+                <button type="button" class="ios-button ios-button-secondary ios-button-block ios-button-small" id="load-targets-btn">
+                  Загрузить доступные чаты
+                </button>
+                <div id="targets-list"></div>
+              </div>
+            </div>
+
+            <div class="ios-form-group">
+              <label class="ios-form-label">Периодичность</label>
+              <select id="template-frequency" class="ios-form-input ios-form-select">
+                <option value="6">Каждые 6 часов</option>
+                <option value="12">Каждые 12 часов</option>
+                <option value="24">Каждые 24 часа</option>
+              </select>
+            </div>
+
+            <div class="ios-form-group">
+              <div class="ios-toggle">
+                <span class="ios-toggle-label">Активен</span>
+                <input type="checkbox" id="template-active" class="ios-switch" checked />
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/app/main.js" type="module"></script>
+  </body>
+</html>
