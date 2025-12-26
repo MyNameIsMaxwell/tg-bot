@@ -5,11 +5,18 @@ if (tg) {
   // Set header color to match iOS style
   tg.setHeaderColor('#F2F2F7');
   tg.setBackgroundColor('#F2F2F7');
+  // Debug: log user info
+  console.log('[TG] User ID:', tg.initDataUnsafe?.user?.id || 'not available');
+  console.log('[TG] initData present:', !!tg.initData);
+} else {
+  console.log('[TG] Telegram WebApp not available');
 }
 
 const apiHeaders = () => ({
   'Content-Type': 'application/json',
   'X-Telegram-Init-Data': tg?.initDataUnsafe ? tg.initData : '',
+  'Cache-Control': 'no-cache, no-store, must-revalidate',
+  'Pragma': 'no-cache',
 });
 
 const templatesContainer = document.getElementById('templates-container');
@@ -24,6 +31,38 @@ const cancelBtn = document.getElementById('dialog-cancel');
 const saveBtn = document.getElementById('dialog-save');
 const loadTargetsBtn = document.getElementById('load-targets-btn');
 const targetsList = document.getElementById('targets-list');
+
+// Loading overlay elements
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingText = document.getElementById('loading-text');
+const loadingSubtext = document.getElementById('loading-subtext');
+
+// Flag to prevent double-clicks
+let isProcessing = false;
+
+// Show/hide full-screen loading overlay (blocks ALL interactions)
+function showLoadingOverlay(text = 'Отправка сводки...', subtext = 'Пожалуйста, подождите') {
+  isProcessing = true;
+  loadingText.textContent = text;
+  loadingSubtext.textContent = subtext;
+  loadingOverlay.classList.add('visible');
+  document.body.classList.add('loading-active');
+}
+
+function hideLoadingOverlay() {
+  isProcessing = false;
+  loadingOverlay.classList.remove('visible');
+  document.body.classList.remove('loading-active');
+}
+
+// Helper to show alert (handles both Telegram and browser)
+function showMessage(message) {
+  if (tg?.showAlert) {
+    tg.showAlert(message);
+  } else {
+    alert(message);
+  }
+}
 
 // Show loading skeleton
 function showLoading() {
@@ -48,11 +87,12 @@ function showEmptyState() {
 async function loadTemplates() {
   showLoading();
   try {
-    const response = await fetch('/api/templates/', {
+    const response = await fetch(`/api/templates/?_t=${Date.now()}`, {
       headers: apiHeaders(),
+      cache: 'no-store',
     });
     if (!response.ok) {
-      throw new Error('Failed to load templates');
+      throw new Error(`Failed to load templates: ${response.status}`);
     }
     const templates = await response.json();
     renderTemplates(templates);
@@ -159,6 +199,7 @@ function openSheet(template = null) {
   document.getElementById('template-target').value = template?.target_chat_id || '';
   document.getElementById('template-frequency').value = template?.frequency_hours || '6';
   document.getElementById('template-active').checked = template?.is_active ?? true;
+  document.getElementById('template-custom-prompt').value = template?.custom_prompt || '';
   targetsList.innerHTML = '';
   dialog.classList.add('open');
 }
@@ -169,6 +210,7 @@ function closeSheet() {
 
 async function submitTemplate(event) {
   event.preventDefault();
+  const customPrompt = document.getElementById('template-custom-prompt').value.trim();
   const payload = {
     name: document.getElementById('template-name').value,
     sources: document
@@ -179,6 +221,7 @@ async function submitTemplate(event) {
     target_chat_id: document.getElementById('template-target').value.trim(),
     frequency_hours: Number(document.getElementById('template-frequency').value),
     is_active: document.getElementById('template-active').checked,
+    custom_prompt: customPrompt || null,
   };
 
   const templateId = document.getElementById('template-id').value;
@@ -202,7 +245,7 @@ async function submitTemplate(event) {
     closeSheet();
     loadTemplates();
   } catch (error) {
-    tg?.showAlert?.(error.message) || alert(error.message);
+    showMessage(error.message);
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Сохранить';
@@ -233,7 +276,7 @@ async function loadTargets() {
       const item = document.createElement('div');
       item.className = 'ios-target-item';
       
-      const icon = t.chat_type === 'channel' ? '📢' : t.chat_type === 'supergroup' ? '👥' : '💬';
+      const icon = t.chat_type === 'channel' ? '📢' : t.chat_type === 'supergroup' ? '👥' : t.chat_type === 'private' ? '🤖' : '💬';
       const subtitle = t.username ? `@${t.username}` : t.id;
       
       item.innerHTML = `
@@ -307,73 +350,60 @@ async function handleTemplateAction(event) {
   }
 
   if (action === 'run-now') {
-    button.disabled = true;
-    const originalText = button.textContent;
-    button.textContent = '...';
-    button.classList.add('ios-loading');
+    // Prevent double-clicks
+    if (isProcessing) {
+      return;
+    }
 
     const dropdown = document.querySelector(`.ios-custom-dropdown[data-role="run-period"][data-id="${id}"]`);
     const hours = dropdown ? Number(dropdown.dataset.value) : 24;
 
+    // Show full-screen loading overlay (blocks entire screen)
+    showLoadingOverlay('Отправка сводки...', `Собираем новости за ${hours} ч`);
+
     try {
-      const res = await fetch(`/api/templates/${id}/run-now?hours_back=${hours}`, {
+      // Add timestamp to prevent caching
+      const timestamp = Date.now();
+      const res = await fetch(`/api/templates/${id}/run-now?hours_back=${hours}&_t=${timestamp}`, {
         method: 'POST',
         headers: apiHeaders(),
+        cache: 'no-store',
       });
 
+      hideLoadingOverlay();
+      
+      // Debug logging
+      console.log(`[run-now] Status: ${res.status}, OK: ${res.ok}`);
+
       if (res.ok) {
-        await pollTemplateStatus(id, button, originalText);
+        const result = await res.json();
+        
+        if (result.success) {
+          let message = 'Сводка отправлена!';
+          if (result.messages_count === 0) {
+            message = 'Новых сообщений не найдено';
+          } else if (result.total_tokens) {
+            message = `Сводка отправлена! (${result.messages_count} сообщ., ${result.total_tokens} токенов)`;
+          }
+          showMessage(message);
+        } else {
+          const errorMsg = result.error || 'Неизвестная ошибка';
+          showMessage(`Ошибка: ${errorMsg}`);
+        }
       } else {
-        tg?.showAlert?.('Ошибка при запуске') || alert('Ошибка при запуске');
-        button.textContent = originalText;
-        button.disabled = false;
-        button.classList.remove('ios-loading');
+        const errorData = await res.json().catch(() => ({}));
+        const errorMsg = errorData.detail || `Ошибка ${res.status}`;
+        console.log(`[run-now] Error response:`, errorData);
+        showMessage(errorMsg);
       }
+      
+      loadTemplates();
     } catch (e) {
-      tg?.showAlert?.('Ошибка сети') || alert('Ошибка сети');
-      button.textContent = originalText;
-      button.disabled = false;
-      button.classList.remove('ios-loading');
+      hideLoadingOverlay();
+      console.error('[run-now] Network error:', e);
+      showMessage(`Ошибка сети: ${e.message || 'проверьте подключение'}`);
     }
   }
-}
-
-async function pollTemplateStatus(templateId, button, originalText) {
-  const maxAttempts = 60;
-  let attempts = 0;
-
-  const poll = async () => {
-    attempts++;
-    try {
-      const res = await fetch('/api/templates/', { headers: apiHeaders() });
-      if (res.ok) {
-        const templates = await res.json();
-        const tpl = templates.find((t) => String(t.id) === String(templateId));
-        if (tpl && !tpl.in_progress) {
-          button.textContent = originalText;
-          button.disabled = false;
-          button.classList.remove('ios-loading');
-          tg?.showAlert?.('Отправка завершена!') || alert('Отправка завершена!');
-          loadTemplates();
-          return;
-        }
-      }
-    } catch (e) {
-      // Ignore errors, keep polling
-    }
-
-    if (attempts < maxAttempts) {
-      setTimeout(poll, 3000);
-    } else {
-      button.textContent = originalText;
-      button.disabled = false;
-      button.classList.remove('ios-loading');
-      tg?.showAlert?.('Превышено время ожидания') || alert('Превышено время ожидания');
-      loadTemplates();
-    }
-  };
-
-  setTimeout(poll, 3000);
 }
 
 // Event Listeners
@@ -426,6 +456,18 @@ document.addEventListener('click', (e) => {
     d.classList.remove('open');
   });
 });
+
+// Block all clicks on loading overlay
+loadingOverlay?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+// Also block touch events on overlay
+loadingOverlay?.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+}, { passive: false });
 
 // Initial load
 loadTemplates();

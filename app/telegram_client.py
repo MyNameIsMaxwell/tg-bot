@@ -207,6 +207,41 @@ async def _upsert_bot_chat(entity, user_id: int) -> None:
         await session.commit()
 
 
+async def _upsert_bot_chat_raw(
+    chat_id: int,
+    user_id: int,
+    title: str,
+    username: Optional[str],
+    chat_type: str,
+    access_hash: Optional[int] = None,
+) -> None:
+    """Store chat with raw parameters (for private chats without entity)."""
+    async with SessionLocal() as session:
+        from sqlalchemy import select
+        stmt = select(BotChat).where(BotChat.id == chat_id, BotChat.user_id == user_id)
+        result = await session.execute(stmt)
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.title = title
+            existing.username = username
+            existing.chat_type = chat_type
+            existing.access_hash = access_hash
+            existing.last_seen_at = datetime.now()
+        else:
+            session.add(
+                BotChat(
+                    id=chat_id,
+                    user_id=user_id,
+                    title=title,
+                    username=username,
+                    chat_type=chat_type,
+                    access_hash=access_hash,
+                    last_seen_at=datetime.now(),
+                )
+            )
+        await session.commit()
+
+
 async def register_chat_for_user(identifier: Union[str, int], user_id: int) -> bool:
     """Try to resolve a chat and register it for a user. Returns True on success."""
     try:
@@ -251,7 +286,10 @@ async def send_message(identifier: Union[str, int], text: str) -> None:
                     entity = InputPeerChannel(channel_id=abs(chat_id) % (10**10), access_hash=stored.access_hash or 0)
                 elif stored.chat_type == "group":
                     entity = InputPeerChat(chat_id=abs(chat_id))
+                elif stored.chat_type in ("user", "private"):
+                    entity = InputPeerUser(user_id=abs(chat_id), access_hash=stored.access_hash or 0)
                 else:
+                    # Unknown type - try as user
                     entity = InputPeerUser(user_id=abs(chat_id), access_hash=stored.access_hash or 0)
             except Exception as exc:  # pylint: disable=broad-except
                 last_exc = exc
@@ -317,6 +355,21 @@ async def ensure_bot_updates_listener() -> None:
                     message_text = event.message.text.strip()
                     parts = message_text.split(maxsplit=1)
                     
+                    # Always register the private chat with the bot as a target
+                    if sender and isinstance(sender, TelegramUser):
+                        sender_username = getattr(sender, "username", None)
+                        internal_user_id = await _get_or_create_user_by_telegram_id(sender.id, sender_username)
+                        
+                        # Register private chat (conversation with bot) as target
+                        await _upsert_bot_chat_raw(
+                            chat_id=sender.id,
+                            user_id=internal_user_id,
+                            title="📬 Личные сообщения (бот)",
+                            username=sender_username,
+                            chat_type="private",
+                        )
+                        logger.info("Registered private chat for user %s (tg: %s)", internal_user_id, sender.id)
+                    
                     if len(parts) > 1:
                         # User provided a channel ID to register
                         target_id = parts[1].strip()
@@ -325,7 +378,9 @@ async def ensure_bot_updates_listener() -> None:
                         # Just /start - show help
                         await event.respond(
                             "👋 Привет! Я бот для создания сводок новостей.\n\n"
-                            "📌 **Как зарегистрировать канал или группу:**\n\n"
+                            "✅ **Личные сообщения зарегистрированы!**\n"
+                            "Теперь вы можете получать сводки прямо в этом чате.\n\n"
+                            "📌 **Как добавить канал или группу:**\n\n"
                             "1. Добавьте бота в канал/группу как администратора\n"
                             "2. Узнайте ID канала через @userinfobot или @getmyid_bot\n"
                             "3. Напишите мне здесь:\n"

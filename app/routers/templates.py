@@ -1,23 +1,32 @@
 """Templates CRUD endpoints."""
 
-from typing import List
+import asyncio
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-import asyncio
-from datetime import datetime, timedelta, timezone
 
 from ..auth import get_current_user
 from ..db import get_session
 from ..models import Template, TemplateSource, User
-from ..schemas import TemplateCreate, TemplateRead, TemplateUpdate
-from worker.processor import process_template
+from ..rate_limit import limiter
+from ..schemas import TargetChatRead, TemplateCreate, TemplateRead, TemplateUpdate
 from app.telegram_client import list_bot_targets, register_chat_for_user
-from ..schemas import TargetChatRead
+from worker.processor import process_template
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
+
+
+class RunNowResponse(BaseModel):
+    """Response for run-now endpoint."""
+    success: bool
+    messages_count: int = 0
+    total_tokens: Optional[int] = None
+    error: Optional[str] = None
 
 
 async def _get_template(
@@ -36,7 +45,9 @@ async def _get_template(
 
 
 @router.get("/", response_model=List[TemplateRead])
+@limiter.limit("60/minute")
 async def list_templates(
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> List[TemplateRead]:
@@ -52,7 +63,9 @@ async def list_templates(
 
 
 @router.post("/", response_model=TemplateRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def create_template(
+    request: Request,
     template_in: TemplateCreate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -63,6 +76,7 @@ async def create_template(
         target_chat_id=template_in.target_chat,
         frequency_hours=template_in.frequency_hours,
         is_active=template_in.is_active,
+        custom_prompt=template_in.custom_prompt,
     )
     sources = [
         TemplateSource(source_identifier=src.strip())
@@ -90,6 +104,7 @@ async def update_template(
     template.target_chat_id = template_in.target_chat
     template.frequency_hours = template_in.frequency_hours
     template.is_active = template_in.is_active
+    template.custom_prompt = template_in.custom_prompt
 
     existing_sources = {src.source_identifier: src for src in template.sources}
     template.sources.clear()
@@ -133,17 +148,24 @@ async def toggle_template(
     return TemplateRead.model_validate(template)
 
 
-@router.post("/{template_id}/run-now", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{template_id}/run-now", response_model=RunNowResponse)
+@limiter.limit("15/minute")
 async def run_template_now(
+    request: Request,
     template_id: int,
     hours_back: int | None = None,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> TemplateRead:
-    """Trigger immediate processing of a template."""
+) -> RunNowResponse:
+    """Trigger immediate processing of a template and wait for completion.
+    
+    This endpoint is synchronous - it waits until the digest is sent
+    to the target channel before returning.
+    """
     template = await _get_template(template_id, current_user, session)
     if template.in_progress:
-        return TemplateRead.model_validate(template)
+        return RunNowResponse(success=False, error="Обработка уже выполняется")
+    
     template.in_progress = True
     await session.commit()
 
@@ -151,14 +173,18 @@ async def run_template_now(
     if hours_back:
         from_dt = datetime.now(tz=timezone.utc) - timedelta(hours=hours_back)
 
-    asyncio.create_task(
-        process_template(
-            template.id,
-            from_datetime_override=from_dt,
-            requester_user_id=current_user.telegram_user_id,
-        )
+    # Wait for processing to complete (synchronous)
+    result = await process_template(
+        template.id,
+        from_datetime_override=from_dt,
     )
-    return TemplateRead.model_validate(template)
+    
+    return RunNowResponse(
+        success=result.success,
+        messages_count=result.messages_count,
+        total_tokens=result.total_tokens,
+        error=result.error,
+    )
 
 
 @router.get("/targets", response_model=List[TargetChatRead])

@@ -362,6 +362,13 @@
         padding-left: 16px;
       }
 
+      .ios-form-hint {
+        font-size: 13px;
+        color: var(--ios-text-secondary);
+        padding-left: 16px;
+        margin-top: 6px;
+      }
+
       .ios-form-input {
         width: 100%;
         font-family: inherit;
@@ -738,6 +745,88 @@
         height: 72px;
         margin-bottom: 1px;
       }
+
+      /* Full-screen Loading Overlay - blocks ALL interactions */
+      .ios-loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        pointer-events: all;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .ios-loading-overlay.visible {
+        display: flex;
+      }
+
+      /* Prevent any interaction behind overlay */
+      body.loading-active {
+        overflow: hidden;
+        pointer-events: none;
+      }
+      
+      body.loading-active .ios-loading-overlay {
+        pointer-events: all;
+      }
+
+      .ios-loading-card {
+        background: var(--ios-card);
+        border-radius: var(--ios-radius-lg);
+        padding: 32px 48px;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: ios-scale-in 0.2s ease;
+      }
+
+      @keyframes ios-scale-in {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      .ios-loading-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid var(--ios-separator);
+        border-top-color: var(--ios-blue);
+        border-radius: 50%;
+        animation: ios-spin-large 0.8s linear infinite;
+        margin: 0 auto 16px;
+      }
+
+      @keyframes ios-spin-large {
+        to { transform: rotate(360deg); }
+      }
+
+      .ios-loading-text {
+        font-size: 17px;
+        font-weight: 500;
+        color: var(--ios-text);
+      }
+
+      .ios-loading-subtext {
+        font-size: 14px;
+        color: var(--ios-text-secondary);
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
@@ -814,6 +903,12 @@
             </div>
 
             <div class="ios-form-group">
+              <label class="ios-form-label">Индивидуальный промпт (необязательно)</label>
+              <textarea id="template-custom-prompt" class="ios-form-input" placeholder="Полностью заменяет стандартный промпт. Пример:&#10;&#10;Ты — редактор крипто-новостей. Создай сводку из 3-5 пунктов.&#10;Формат: 📌 Главное, затем • остальное.&#10;Ссылку ставь в конце каждого пункта." rows="5"></textarea>
+              <div class="ios-form-hint">⚠️ Полностью заменяет системный промпт. Если пусто — используется стандартный.</div>
+            </div>
+
+            <div class="ios-form-group">
               <div class="ios-toggle">
                 <span class="ios-toggle-label">Активен</span>
                 <input type="checkbox" id="template-active" class="ios-switch" checked />
@@ -821,6 +916,15 @@
             </div>
           </form>
         </div>
+      </div>
+    </div>
+
+    <!-- Full-screen Loading Overlay -->
+    <div class="ios-loading-overlay" id="loading-overlay">
+      <div class="ios-loading-card">
+        <div class="ios-loading-spinner"></div>
+        <div class="ios-loading-text" id="loading-text">Отправка сводки...</div>
+        <div class="ios-loading-subtext" id="loading-subtext">Пожалуйста, подождите</div>
       </div>
     </div>
 

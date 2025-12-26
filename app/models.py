@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql.sqltypes import BigInteger
 
@@ -41,9 +41,13 @@ class Template(TimestampMixin, Base):
     """Digest template definition."""
 
     __tablename__ = "templates"
+    __table_args__ = (
+        Index("ix_template_user_active", "user_id", "is_active"),
+        Index("ix_template_scheduler", "is_active", "in_progress", "last_run_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128))
     target_chat_id: Mapped[str] = mapped_column(String(128))
     frequency_hours: Mapped[int] = mapped_column(Integer)
@@ -52,6 +56,7 @@ class Template(TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
     in_progress: Mapped[bool] = mapped_column(Boolean, default=False)
+    custom_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="templates")
     sources: Mapped[List["TemplateSource"]] = relationship(
@@ -81,10 +86,13 @@ class RunLog(Base):
     """Execution log for template runs."""
 
     __tablename__ = "run_logs"
+    __table_args__ = (
+        Index("ix_runlog_template_status", "template_id", "status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     template_id: Mapped[int] = mapped_column(
-        ForeignKey("templates.id", ondelete="CASCADE")
+        ForeignKey("templates.id", ondelete="CASCADE"), index=True
     )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc)
