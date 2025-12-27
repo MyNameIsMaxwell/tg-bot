@@ -21,17 +21,12 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-async def main() -> None:
-    setup_logging()
-    await init_db()
-    interval = settings.scheduler_interval_seconds
-    logger.info("Scheduler started with %ss interval", interval)
-    while True:
-        try:
-            await _schedule_due_templates()
-        except Exception:  # pylint: disable=broad-except
-            logger.exception("Scheduler iteration failed")
-        await asyncio.sleep(interval)
+def is_template_due(template: Template, now: datetime) -> bool:
+    """Return True if template should run at the given moment."""
+    if template.last_run_at is None:
+        return True
+    next_run = template.last_run_at + timedelta(hours=template.frequency_hours)
+    return now >= next_run
 
 
 async def _schedule_due_templates() -> None:
@@ -62,14 +57,18 @@ async def _schedule_due_templates() -> None:
         logger.info("Scheduled template %s", template_id)
 
 
+async def main() -> None:
+    setup_logging()
+    await init_db()
+    interval = settings.scheduler_interval_seconds
+    logger.info("Scheduler started with %ss interval", interval)
+    while True:
+        try:
+            await _schedule_due_templates()
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Scheduler iteration failed")
+        await asyncio.sleep(interval)
+
+
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-def is_template_due(template: Template, now: datetime) -> bool:
-    """Return True if template should run at the given moment."""
-    if template.last_run_at is None:
-        return True
-    next_run = template.last_run_at + timedelta(hours=template.frequency_hours)
-    return now >= next_run
-
