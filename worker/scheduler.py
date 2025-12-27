@@ -25,7 +25,13 @@ def is_template_due(template: Template, now: datetime) -> bool:
     """Return True if template should run at the given moment."""
     if template.last_run_at is None:
         return True
-    next_run = template.last_run_at + timedelta(hours=template.frequency_hours)
+    
+    last_run = template.last_run_at
+    # Ensure last_run is timezone-aware (convert naive to UTC)
+    if last_run.tzinfo is None:
+        last_run = last_run.replace(tzinfo=timezone.utc)
+    
+    next_run = last_run + timedelta(hours=template.frequency_hours)
     return now >= next_run
 
 
