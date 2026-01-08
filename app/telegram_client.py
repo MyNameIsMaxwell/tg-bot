@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from telethon import TelegramClient, events
-from telethon.errors import RPCError, BotMethodInvalidError, FloodWaitError
+from telethon.errors import (
+    RPCError,
+    BotMethodInvalidError,
+    FloodWaitError,
+    UsernameNotOccupiedError,
+    UsernameInvalidError,
+    ChannelPrivateError,
+    ChatAdminRequiredError,
+)
 from telethon.sessions import StringSession
 from telethon.tl.custom.message import Message
 from telethon.tl.types import (
@@ -102,31 +110,79 @@ async def fetch_messages(
     from_datetime: Optional[datetime] = None,
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
-    """Fetch recent messages after from_datetime."""
+    """Fetch recent messages after from_datetime.
+    
+    Returns empty list if channel doesn't exist or is inaccessible.
+    """
     client = await _get_fetch_client()
-    entity = await client.get_entity(identifier)
+    
+    # Try to resolve the entity, handle non-existent channels gracefully
+    try:
+        entity = await client.get_entity(identifier)
+    except UsernameNotOccupiedError:
+        logger.warning("Channel %s does not exist (username not occupied)", identifier)
+        return []
+    except UsernameInvalidError:
+        logger.warning("Channel %s has invalid username format", identifier)
+        return []
+    except ChannelPrivateError:
+        logger.warning("Channel %s is private and inaccessible", identifier)
+        return []
+    except ChatAdminRequiredError:
+        logger.warning("Admin rights required to access %s", identifier)
+        return []
+    except ValueError as e:
+        # Telethon raises ValueError for "No user has X as username"
+        if "username" in str(e).lower() or "nobody" in str(e).lower():
+            logger.warning("Channel %s not found: %s", identifier, e)
+            return []
+        raise
+    except Exception as e:
+        # Log other errors but don't crash
+        logger.error("Failed to resolve channel %s: %s", identifier, e)
+        return []
+    
     collected: List[Dict[str, Any]] = []
 
-    async for message in client.iter_messages(entity, limit=limit):
-        if from_datetime and message.date <= from_datetime:
-            break
-        if not _is_relevant_message(message):
-            continue
-        username = getattr(entity, "username", None)
-        link = None
-        if getattr(message, "link", None):
-            link = str(message.link)
-        elif username:
-            link = f"https://t.me/{username}/{message.id}"
-        collected.append(
-            {
-                "id": message.id,
-                "date": message.date,
-                "text": message.message or "",
-                "source": username or str(entity.id),
-                "link": link,
-            }
-        )
+    # Ensure from_datetime is timezone-aware for comparison with message.date (which is UTC)
+    compare_dt = None
+    if from_datetime:
+        if from_datetime.tzinfo is None:
+            compare_dt = from_datetime.replace(tzinfo=timezone.utc)
+        else:
+            compare_dt = from_datetime
+
+    try:
+        async for message in client.iter_messages(entity, limit=limit):
+            if compare_dt and message.date <= compare_dt:
+                break
+            if not _is_relevant_message(message):
+                continue
+            username = getattr(entity, "username", None)
+            link = None
+            if getattr(message, "link", None):
+                link = str(message.link)
+            elif username:
+                link = f"https://t.me/{username}/{message.id}"
+            collected.append(
+                {
+                    "id": message.id,
+                    "date": message.date,
+                    "text": message.message or "",
+                    "source": username or str(entity.id),
+                    "link": link,
+                }
+            )
+    except ChannelPrivateError:
+        logger.warning("Lost access to channel %s during iteration", identifier)
+        return []
+    except ChatAdminRequiredError:
+        logger.warning("Admin rights required to read messages from %s", identifier)
+        return []
+    except Exception as e:
+        logger.error("Error fetching messages from %s: %s", identifier, e)
+        return []
+        
     return list(reversed(collected))
 
 

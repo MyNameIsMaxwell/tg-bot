@@ -80,12 +80,25 @@ def _extract_user(data: Dict[str, str]) -> Dict[str, Optional[str]]:
 
 async def authenticate_user(init_data: str, session: AsyncSession) -> User:
     """Validate initData and upsert the user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     parsed = _parse_init_data(init_data)
     expected_hash = _calculate_hash(parsed)
+    
     if expected_hash != parsed["hash"]:
+        logger.warning("Hash mismatch! Expected: %s, Got: %s", expected_hash[:20] + "...", parsed["hash"][:20] + "...")
+        logger.warning("Parsed keys: %s", list(parsed.keys()))
         raise InitDataError("Invalid initData hash")
-    _validate_auth_date(parsed.get("auth_date"))
+    
+    try:
+        _validate_auth_date(parsed.get("auth_date"))
+    except InitDataError as e:
+        logger.warning("Auth date validation failed: %s, auth_date=%s", e.detail, parsed.get("auth_date"))
+        raise
+    
     user_payload = _extract_user(parsed)
+    logger.info("Auth successful for telegram_user_id=%s", user_payload.get("telegram_user_id"))
 
     stmt = select(User).where(User.telegram_user_id == user_payload["telegram_user_id"])
     result = await session.execute(stmt)
@@ -107,8 +120,16 @@ async def get_current_user(
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """FastAPI dependency that returns the authenticated user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     raw_init_data = init_data_header or init_data_query
+    logger.info("Auth attempt: initData length=%s, first_100_chars=%s", 
+                len(raw_init_data) if raw_init_data else 0,
+                raw_init_data[:100] if raw_init_data else "EMPTY")
+    
     if not raw_init_data:
+        logger.warning("Auth failed: initData not provided")
         raise InitDataError("initData not provided")
     return await authenticate_user(raw_init_data, session)
 

@@ -5,11 +5,18 @@ if (tg) {
   // Set header color to match iOS style
   tg.setHeaderColor('#F2F2F7');
   tg.setBackgroundColor('#F2F2F7');
-  // Debug: log user info
-  console.log('[TG] User ID:', tg.initDataUnsafe?.user?.id || 'not available');
+  // Debug: detailed logging
+  console.log('[TG] === Telegram WebApp Debug ===');
+  console.log('[TG] User ID:', tg.initDataUnsafe?.user?.id || 'NOT AVAILABLE');
+  console.log('[TG] Username:', tg.initDataUnsafe?.user?.username || 'NOT AVAILABLE');
   console.log('[TG] initData present:', !!tg.initData);
+  console.log('[TG] initData length:', tg.initData?.length || 0);
+  console.log('[TG] initData first 100 chars:', tg.initData?.substring(0, 100) || 'EMPTY');
+  console.log('[TG] initDataUnsafe:', JSON.stringify(tg.initDataUnsafe, null, 2));
+  console.log('[TG] platform:', tg.platform);
+  console.log('[TG] version:', tg.version);
 } else {
-  console.log('[TG] Telegram WebApp not available');
+  console.log('[TG] Telegram WebApp NOT AVAILABLE - running outside Telegram');
 }
 
 const apiHeaders = () => ({
