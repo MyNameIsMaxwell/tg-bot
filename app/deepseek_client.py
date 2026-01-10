@@ -23,6 +23,10 @@ settings = get_settings()
 
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
+# Limits for input truncation to avoid hitting token limits
+MAX_INPUT_CHARS = 15000  # Max total characters in input posts
+MAX_POSTS = 50  # Max number of posts to include
+
 # Structured system prompt with clear role and rules
 SYSTEM_PROMPT = """Ты — AI-редактор новостных дайджестов. Твоя задача — создавать краткие, информативные сводки из Telegram-постов.
 
@@ -37,6 +41,7 @@ SYSTEM_PROMPT = """Ты — AI-редактор новостных дайдже�
 5. Группируй схожие темы, если это уместно
 6. Ссылку размещай в конце пункта, без markdown-форматирования
 7. Используй эмодзи умеренно — только для визуального разделения тем (📌 для главного, • для остальных)
+8. ОБЯЗАТЕЛЬНО заверши каждый пункт полностью — не обрывай на полуслове
 
 ## Формат вывода:
 📌 Главная новость в одном предложении https://t.me/...
@@ -77,20 +82,43 @@ class SummaryResult:
 
 
 def _format_posts_for_prompt(messages: List[Dict[str, Any]]) -> str:
-    """Format messages into a structured list for the prompt."""
+    """Format messages into a structured list for the prompt.
+    
+    Truncates input to avoid exceeding token limits.
+    """
+    # Limit number of posts
+    limited_messages = messages[:MAX_POSTS]
+    
     formatted_posts = []
-    for i, msg in enumerate(messages, 1):
+    total_chars = 0
+    
+    for i, msg in enumerate(limited_messages, 1):
         text = msg.get("text", "").strip()
         link = msg.get("link", "")
         if not text:
             continue
+        
+        # Truncate individual long posts (keep first 1000 chars)
+        if len(text) > 1000:
+            text = text[:1000] + "..."
+        
         post_block = f"[Пост {i}]\n{text}"
         if link:
             post_block += f"\nСсылка: {link}"
+        
+        # Check total length limit
+        if total_chars + len(post_block) > MAX_INPUT_CHARS:
+            logger.warning("Truncating input: reached %d chars limit at post %d", MAX_INPUT_CHARS, i)
+            break
+        
         formatted_posts.append(post_block)
+        total_chars += len(post_block)
     
     if not formatted_posts:
         return ""
+    
+    if len(formatted_posts) < len(messages):
+        logger.info("Input truncated: using %d of %d posts", len(formatted_posts), len(messages))
     
     return "\n\n".join(formatted_posts)
 
@@ -164,8 +192,8 @@ async def summarize_messages(
         "Content-Type": "application/json",
     }
     
-    # Adjust max_tokens based on number of messages
-    max_tokens = min(800, 100 + len(messages) * 50)
+    # Use generous max_tokens to avoid truncation (DeepSeek is cheap)
+    max_tokens = 1500
     
     payload = {
         "model": "deepseek-chat",
@@ -189,17 +217,55 @@ async def summarize_messages(
         raise RuntimeError("DeepSeek returned no choices")
 
     usage = data.get("usage") or {}
+    summary_text = choices[0]["message"]["content"].strip()
+    finish_reason = choices[0].get("finish_reason", "")
+    
+    # Detect if response was truncated due to length limit
+    if finish_reason == "length":
+        logger.warning("DeepSeek response was truncated (finish_reason=length)")
+        # Try to fix truncated output - remove incomplete last line
+        summary_text = _fix_truncated_output(summary_text)
+    
     result = SummaryResult(
-        text=choices[0]["message"]["content"].strip(),
+        text=summary_text,
         prompt_tokens=usage.get("prompt_tokens"),
         completion_tokens=usage.get("completion_tokens"),
         total_tokens=usage.get("total_tokens"),
     )
     logger.info(
-        "DeepSeek summary generated: %d messages -> %d tokens",
+        "DeepSeek summary generated: %d messages -> %d tokens (finish: %s)",
         len(messages),
         result.total_tokens or 0,
+        finish_reason,
     )
+    return result
+
+
+def _fix_truncated_output(text: str) -> str:
+    """Fix truncated output by removing incomplete last line."""
+    if not text:
+        return text
+    
+    lines = text.strip().split('\n')
+    
+    # Check if last line looks incomplete (no link at the end, or ends mid-word)
+    if lines:
+        last_line = lines[-1].strip()
+        # If last line doesn't end with a URL or proper punctuation, remove it
+        if last_line and not (
+            last_line.endswith(('...', '.', '!', '?')) or 
+            'https://t.me/' in last_line or
+            't.me/' in last_line
+        ):
+            logger.info("Removing truncated last line: %s...", last_line[:50])
+            lines = lines[:-1]
+    
+    result = '\n'.join(lines)
+    
+    # Add note if we had to truncate
+    if result != text.strip():
+        result += "\n\n_(сводка сокращена из-за большого объёма)_"
+    
     return result
 
 
